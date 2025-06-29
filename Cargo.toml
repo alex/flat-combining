@@ -1,11 +1,7 @@
 [package]
-name = "magic-structure"
+name = "flat-combining"
 version = "0.1.0"
 edition = "2021"
-
-[lib]
-name = "magic_structure"
-path = "src/lib.rs"
 
 [dependencies]
 pinned-init = { version = "0.0.9", default-features = false }

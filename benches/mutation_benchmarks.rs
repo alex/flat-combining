@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use magic_structure::{FlatCombining, Mutator, Mutex};
+use flat_combining::{FlatCombining, Mutator, Mutex};
 use std::sync::Barrier;
 use std::thread;
 use std::time::Duration;
