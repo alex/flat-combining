@@ -180,6 +180,8 @@ mod tests {
             }
         });
 
-        m.mutate(|v| { assert_eq!(*v, N_THREADS * N_OPS); });
+        m.mutate(|v| {
+            assert_eq!(*v, N_THREADS * N_OPS);
+        });
     }
 }

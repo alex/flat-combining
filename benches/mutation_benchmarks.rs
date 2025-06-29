@@ -12,9 +12,8 @@ fn bench_mutator_implementation<M: Mutator<u64> + Sync>(
 
     let work_durations = [
         Duration::from_nanos(0),
+        Duration::from_nanos(10),
         Duration::from_nanos(100),
-        Duration::from_micros(1),
-        Duration::from_micros(10),
     ];
 
     let thread_counts = [2, 4, 8];
@@ -22,12 +21,7 @@ fn bench_mutator_implementation<M: Mutator<u64> + Sync>(
 
     for &work_duration in &work_durations {
         for &thread_count in &thread_counts {
-            let param_name = format!(
-                "{}_{}_{}threads",
-                impl_name,
-                work_duration,
-                thread_count
-            );
+            let param_name = format!("{impl_name}_{work_duration:?}_{thread_count}threads",);
             group.throughput(Throughput::Elements(
                 (thread_count * operations_per_thread) as u64,
             ));

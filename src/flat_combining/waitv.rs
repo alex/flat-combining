@@ -41,7 +41,7 @@ pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> Wait
             return WaitResult::WaiterReady;
         }
         if let Some(guard) = mutex.try_lock() {
-            return WaitResult::MutexLocked(guard)
+            return WaitResult::MutexLocked(guard);
         }
 
         match futex::waitv(
