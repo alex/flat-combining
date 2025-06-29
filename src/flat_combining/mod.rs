@@ -102,6 +102,8 @@ impl<T> crate::Mutator<T> for FlatCombining<T> {
             next: AtomicPtr::new(ptr::null_mut()),
         });
         if let Some((record, idx)) = self.pool.allocate(init) {
+            // `f` is now owned by the `OpRecord`.
+            std::mem::forget(f);
             // SAFETY: pointer is valid, we just got it from the pool.
             unsafe {
                 self.push_head(record as *const _ as _);
