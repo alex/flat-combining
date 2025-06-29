@@ -159,4 +159,27 @@ mod tests {
             *v += 1;
         });
     }
+
+    #[test]
+    fn test_contended() {
+        const N_THREADS: usize = 32;
+        const N_OPS: usize = 16;
+
+        let m = FlatCombining::new(0);
+        let b = std::sync::Barrier::new(N_THREADS);
+
+        std::thread::scope(|s| {
+            for _ in 0..N_THREADS {
+                s.spawn(|| {
+                    b.wait();
+
+                    for _ in 0..N_OPS {
+                        m.mutate(|v| *v += 1);
+                    }
+                });
+            }
+        });
+
+        m.mutate(|v| { assert_eq!(*v, N_THREADS * N_OPS); });
+    }
 }
