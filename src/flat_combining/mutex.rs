@@ -17,7 +17,7 @@ pub struct MutexGuard<'a, T> {
 }
 
 impl<T> Mutex<T> {
-    const UNLOCKED: u32 = 0;
+    pub(crate) const UNLOCKED: u32 = 0;
     const LOCKED: u32 = 1;
     const CONTENDED: u32 = 2;
 

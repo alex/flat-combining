@@ -15,16 +15,19 @@ pub enum WaitResult<'a, T> {
 /// or `WaitResult::WaiterReady` if the waiter was triggered.
 pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> WaitResult<'a, T> {
     loop {
-        // Check conditions at the start of each loop iteration
+        let mutex_value = mutex.futex().load(Ordering::Acquire);
+        let waiter_value = waiter.futex_word().load(Ordering::Acquire);
+
         if waiter.is_ready() {
             return WaitResult::WaiterReady;
         }
-        if let Some(guard) = mutex.try_lock() {
-            return WaitResult::MutexLocked(guard);
+        if mutex_value == Mutex::<T>::UNLOCKED {
+            if let Some(guard) = mutex.try_lock() {
+                return WaitResult::MutexLocked(guard);
+            } else {
+                continue;
+            }
         }
-
-        let mutex_value = mutex.futex().load(Ordering::Acquire);
-        let waiter_value = waiter.futex_word().load(Ordering::Acquire);
 
         // Create futex wait descriptors with current values
         let mut wait1 = futex::Wait::new();
