@@ -7,9 +7,7 @@ use std::time::Duration;
 fn bench_mutator_implementation<M: Mutator<u64> + Sync>(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
     impl_name: &str,
-) where
-    M: 'static,
-{
+) {
     group.sample_size(10);
 
     let work_durations = [

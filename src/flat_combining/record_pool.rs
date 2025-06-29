@@ -86,8 +86,7 @@ impl<T> RecordPool<T> {
         // Check for double-free
         assert!(
             (previous & slot_mask) == 0,
-            "Attempted to free already available slot {}",
-            index
+            "Attempted to free already available slot {index}",
         );
     }
 }
