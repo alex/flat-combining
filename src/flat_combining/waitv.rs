@@ -53,15 +53,13 @@ pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> Wait
                     // Mutex changed - try to lock it
                     if let Some(guard) = mutex.try_lock() {
                         return WaitResult::MutexLocked(guard);
-                    } else {
-                        continue;
                     }
                 } else {
                     // Waiter was triggered
                     return WaitResult::WaiterReady;
                 }
             }
-            Err(_) => continue,
+            Err(_) => {}
         }
     }
 }
