@@ -29,17 +29,11 @@ pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> Wait
             }
         } else if mutex_value == Mutex::<T>::LOCKED {
             // Upgrade the mutex to contended.
-            if mutex
-                .futex()
-                .compare_exchange_weak(
-                    Mutex::<T>::LOCKED,
-                    Mutex::<T>::CONTENDED,
-                    Ordering::Relaxed,
-                    Ordering::Relaxed,
-                )
-                .is_err()
-            {
-                continue;
+            if mutex.futex().swap(Mutex::<T>::CONTENDED, Ordering::Acquire) == Mutex::<T>::UNLOCKED {
+                // We just swapped from UNLOCKED -> CONTENDED, which means we
+                // took the lock.
+                let guard = MutexGuard { mutex };
+                return WaitResult::MutexLocked(guard);
             }
             mutex_value = Mutex::<T>::CONTENDED;
         }
