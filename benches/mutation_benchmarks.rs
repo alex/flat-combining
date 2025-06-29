@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use magic_structure::{Mutator, Mutex};
+use magic_structure::{FlatCombining, Mutator, Mutex};
 use std::sync::Barrier;
 use std::thread;
 use std::time::Duration;
@@ -67,6 +67,7 @@ fn bench_mutator_implementation<M: Mutator<u64> + Sync>(
 fn bench_workload_matrix(c: &mut Criterion) {
     let mut group = c.benchmark_group("workload_matrix");
     bench_mutator_implementation::<Mutex<u64>>(&mut group, "mutex");
+    bench_mutator_implementation::<FlatCombining<u64>>(&mut group, "mutex");
 }
 
 criterion_group!(benches, bench_workload_matrix);

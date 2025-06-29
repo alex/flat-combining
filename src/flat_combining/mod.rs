@@ -136,6 +136,9 @@ impl<T> crate::Mutator<T> for FlatCombining<T> {
     }
 }
 
+unsafe impl<T: Send> Send for FlatCombining<T> {}
+unsafe impl<T: Send> Sync for FlatCombining<T> {}
+
 #[cfg(test)]
 mod tests {
     use crate::{FlatCombining, Mutator};
