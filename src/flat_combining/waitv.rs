@@ -15,12 +15,11 @@ pub enum WaitResult<'a, T> {
 /// or `WaitResult::WaiterReady` if the waiter was triggered.
 pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> WaitResult<'a, T> {
     loop {
-        let mut mutex_value = mutex.futex().load(Ordering::Acquire);
-        let waiter_value = waiter.futex_word().load(Ordering::Acquire);
-
         if waiter.is_ready() {
             return WaitResult::WaiterReady;
         }
+
+        let mutex_value = mutex.futex().load(Ordering::Acquire);
         if mutex_value == Mutex::<T>::UNLOCKED {
             if let Some(guard) = mutex.try_lock() {
                 return WaitResult::MutexLocked(guard);
@@ -29,24 +28,24 @@ pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> Wait
             }
         } else if mutex_value == Mutex::<T>::LOCKED {
             // Upgrade the mutex to contended.
-            if mutex.futex().swap(Mutex::<T>::CONTENDED, Ordering::Acquire) == Mutex::<T>::UNLOCKED {
+            if mutex.futex().swap(Mutex::<T>::CONTENDED, Ordering::Acquire) == Mutex::<T>::UNLOCKED
+            {
                 // We just swapped from UNLOCKED -> CONTENDED, which means we
                 // took the lock.
                 let guard = MutexGuard { mutex };
                 return WaitResult::MutexLocked(guard);
             }
-            mutex_value = Mutex::<T>::CONTENDED;
         }
 
         // Create futex wait descriptors with current values
         let mut wait1 = futex::Wait::new();
-        wait1.val = mutex_value as u64;
+        wait1.val = Mutex::<T>::CONTENDED as u64;
         wait1.uaddr = futex::WaitPtr::new(mutex.futex() as *const _ as *mut _);
         wait1.flags = futex::WaitFlags::SIZE_U32 | futex::WaitFlags::PRIVATE;
 
         let mut wait2 = futex::Wait::new();
-        wait2.val = waiter_value as u64;
-        wait2.uaddr = futex::WaitPtr::new(waiter.futex_word() as *const _ as *mut _);
+        wait2.val = Waiter::UNREADY as u64;
+        wait2.uaddr = futex::WaitPtr::new(waiter.futex() as *const _ as *mut _);
         wait2.flags = futex::WaitFlags::SIZE_U32 | futex::WaitFlags::PRIVATE;
 
         let futexes = [wait1, wait2];

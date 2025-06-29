@@ -2,29 +2,32 @@ use rustix::thread::futex;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 pub struct Waiter {
-    futex_word: AtomicU32,
+    futex: AtomicU32,
 }
 
 impl Waiter {
+    pub(crate) const UNREADY: u32 = 0;
+    pub(crate) const READY: u32 = 1;
+
     pub fn new() -> Self {
         Self {
-            futex_word: AtomicU32::new(0),
+            futex: AtomicU32::new(Self::UNREADY),
         }
     }
 
-    pub(crate) fn futex_word(&self) -> &AtomicU32 {
-        &self.futex_word
+    pub(crate) fn futex(&self) -> &AtomicU32 {
+        &self.futex
     }
 
     pub fn is_ready(&self) -> bool {
-        self.futex_word.load(Ordering::Acquire) == 1
+        self.futex.load(Ordering::Acquire) == Self::READY
     }
 
     pub fn notify(&self) {
         // Signal that we're ready.
-        self.futex_word.swap(1, Ordering::Release);
+        self.futex.swap(Self::READY, Ordering::Release);
 
         // Wake up one waiting thread
-        let _ = futex::wake(&self.futex_word, futex::Flags::PRIVATE, 1);
+        let _ = futex::wake(&self.futex, futex::Flags::PRIVATE, 1);
     }
 }
