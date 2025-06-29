@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn test_contended() {
         const N_THREADS: usize = 32;
-        const N_OPS: usize = 16;
+        const N_OPS: usize = 128;
 
         let m = FlatCombining::new(0);
         let b = std::sync::Barrier::new(N_THREADS);

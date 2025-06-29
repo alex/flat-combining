@@ -18,8 +18,8 @@ pub struct MutexGuard<'a, T> {
 
 impl<T> Mutex<T> {
     pub(crate) const UNLOCKED: u32 = 0;
-    const LOCKED: u32 = 1;
-    const CONTENDED: u32 = 2;
+    pub(crate) const LOCKED: u32 = 1;
+    pub(crate) const CONTENDED: u32 = 2;
 
     pub(crate) fn futex(&self) -> &AtomicU32 {
         &self.futex
