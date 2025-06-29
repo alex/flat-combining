@@ -33,14 +33,8 @@ pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> Wait
         }
 
         let mutex_value = mutex.futex().load(Ordering::Relaxed);
-        if mutex_value == Mutex::<T>::UNLOCKED {
-            if let Some(guard) = mutex.try_lock() {
-                return WaitResult::MutexLocked(guard);
-            } else {
-                continue;
-            }
-        } else if mutex_value == Mutex::<T>::LOCKED {
-            // Upgrade the mutex to contended.
+        // Upgrade the mutex to contended.
+        if mutex_value != Mutex::<T>::CONTENDED {
             if mutex.futex().swap(Mutex::<T>::CONTENDED, Ordering::Acquire) == Mutex::<T>::UNLOCKED
             {
                 // We just swapped from UNLOCKED -> CONTENDED, which means we
@@ -59,7 +53,12 @@ pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> Wait
             Ok(index) => {
                 if index == 0 {
                     // Mutex changed - try to lock it
-                    if let Some(guard) = mutex.try_lock() {
+                    if mutex.futex().swap(Mutex::<T>::CONTENDED, Ordering::Acquire)
+                        == Mutex::<T>::UNLOCKED
+                    {
+                        // We just swapped from UNLOCKED -> CONTENDED, which means we
+                        // took the lock.
+                        let guard = MutexGuard { mutex };
                         return WaitResult::MutexLocked(guard);
                     }
                 } else {

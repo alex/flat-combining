@@ -72,24 +72,9 @@ impl<T> Mutex<T> {
         let mut state = self.futex.load(Ordering::Relaxed);
 
         loop {
-            // If unlocked, try to acquire
-            if state == Self::UNLOCKED {
-                match self.futex.compare_exchange_weak(
-                    Self::UNLOCKED,
-                    Self::LOCKED,
-                    Ordering::Acquire,
-                    Ordering::Relaxed,
-                ) {
-                    Ok(_) => return MutexGuard { mutex: self },
-                    Err(new_state) => {
-                        state = new_state;
-                        continue;
-                    }
-                }
-            }
-
             // Mark as contended if not already
-            if state == Self::LOCKED {
+            // If unlocked, try to acquire
+            if state != Self::CONTENDED {
                 // Upgrade the mutex to contended.
                 if self.futex.swap(Self::CONTENDED, Ordering::Acquire) == Self::UNLOCKED {
                     // We just swapped from UNLOCKED -> CONTENDED, which means we
