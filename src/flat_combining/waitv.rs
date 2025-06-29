@@ -14,6 +14,19 @@ pub enum WaitResult<'a, T> {
 /// Returns `WaitResult::MutexLocked` with the guard if the mutex was acquired,
 /// or `WaitResult::WaiterReady` if the waiter was triggered.
 pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> WaitResult<'a, T> {
+    // Create futex wait descriptors with expected values
+    let mut wait1 = futex::Wait::new();
+    wait1.val = Mutex::<T>::CONTENDED as u64;
+    wait1.uaddr = futex::WaitPtr::new(mutex.futex() as *const _ as *mut _);
+    wait1.flags = futex::WaitFlags::SIZE_U32 | futex::WaitFlags::PRIVATE;
+
+    let mut wait2 = futex::Wait::new();
+    wait2.val = Waiter::UNREADY as u64;
+    wait2.uaddr = futex::WaitPtr::new(waiter.futex() as *const _ as *mut _);
+    wait2.flags = futex::WaitFlags::SIZE_U32 | futex::WaitFlags::PRIVATE;
+
+    let futexes = [wait1, wait2];
+
     loop {
         if waiter.is_ready() {
             return WaitResult::WaiterReady;
@@ -36,19 +49,6 @@ pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> Wait
                 return WaitResult::MutexLocked(guard);
             }
         }
-
-        // Create futex wait descriptors with current values
-        let mut wait1 = futex::Wait::new();
-        wait1.val = Mutex::<T>::CONTENDED as u64;
-        wait1.uaddr = futex::WaitPtr::new(mutex.futex() as *const _ as *mut _);
-        wait1.flags = futex::WaitFlags::SIZE_U32 | futex::WaitFlags::PRIVATE;
-
-        let mut wait2 = futex::Wait::new();
-        wait2.val = Waiter::UNREADY as u64;
-        wait2.uaddr = futex::WaitPtr::new(waiter.futex() as *const _ as *mut _);
-        wait2.flags = futex::WaitFlags::SIZE_U32 | futex::WaitFlags::PRIVATE;
-
-        let futexes = [wait1, wait2];
 
         match futex::waitv(
             &futexes,
