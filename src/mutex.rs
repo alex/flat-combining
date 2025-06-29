@@ -17,7 +17,7 @@ impl<T> crate::Mutator<T> for Mutex<T> {
         }
     }
 
-    fn mutate(&self, f: impl FnOnce(&mut T) + Send) {
+    fn mutate<F: FnOnce(&mut T) + Send>(&self, f: F) {
         let mut guard = self.data.lock().expect("Mutex was poisoned");
         f(&mut *guard)
     }

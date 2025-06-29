@@ -8,7 +8,8 @@ name = "magic_structure"
 path = "src/lib.rs"
 
 [dependencies]
-crossbeam-queue = "0.3"
+pinned-init = { version = "0.0.9", default-features = false }
+rustix = { version = "1.0", features = ["thread", "process"] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

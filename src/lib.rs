@@ -1,9 +1,11 @@
 pub trait Mutator<T> {
     fn new(value: T) -> Self;
 
-    fn mutate(&self, f: impl FnOnce(&mut T) + Send);
+    fn mutate<F: FnOnce(&mut T) + Send>(&self, f: F);
 }
 
+mod flat_combining;
 mod mutex;
 
+pub use crate::flat_combining::FlatCombining;
 pub use crate::mutex::Mutex;
