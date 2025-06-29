@@ -19,7 +19,7 @@ pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> Wait
             return WaitResult::WaiterReady;
         }
 
-        let mutex_value = mutex.futex().load(Ordering::Acquire);
+        let mutex_value = mutex.futex().load(Ordering::Relaxed);
         if mutex_value == Mutex::<T>::UNLOCKED {
             if let Some(guard) = mutex.try_lock() {
                 return WaitResult::MutexLocked(guard);
