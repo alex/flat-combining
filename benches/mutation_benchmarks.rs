@@ -23,9 +23,9 @@ fn bench_mutator_implementation<M: Mutator<u64> + Sync>(
     for &work_duration in &work_durations {
         for &thread_count in &thread_counts {
             let param_name = format!(
-                "{}_{}μs_{}threads",
+                "{}_{}_{}threads",
                 impl_name,
-                work_duration.as_micros(),
+                work_duration,
                 thread_count
             );
             group.throughput(Throughput::Elements(
