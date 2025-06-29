@@ -70,8 +70,11 @@ pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> Wait
                         return WaitResult::MutexLocked(guard);
                     }
                 } else {
-                    // Waiter was triggered
-                    return WaitResult::WaiterReady;
+                    // Waiter was triggered. We need to verify its really ready
+                    // because futex is allowed to cause spurious wakeups.
+                    if waiter.is_ready() {
+                        return WaitResult::WaiterReady;
+                    }
                 }
             }
             Err(_) => {}
