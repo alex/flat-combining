@@ -27,7 +27,8 @@ impl Waiter {
         // Signal that we're ready.
         self.futex.swap(Self::READY, Ordering::Release);
 
-        // Wake up one waiting thread
+        // Wake up one waiting thread. Assumes that only one person is ever
+        // waiting on this waiter.
         let _ = futex::wake(&self.futex, futex::Flags::PRIVATE, 1);
     }
 }

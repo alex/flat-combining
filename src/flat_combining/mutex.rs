@@ -17,8 +17,14 @@ pub struct MutexGuard<'a, T> {
 }
 
 impl<T> Mutex<T> {
+    // The lock is available and may be taken.
     pub(crate) const UNLOCKED: u32 = 0;
+    // The lock is taken, but there are no other waiters. If you attempt to
+    // take the lock and its in this state, you _must_ upgrade it to
+    // `CONTENDED` or you won't get woken up.
     pub(crate) const LOCKED: u32 = 1;
+    // The lock is taken and there are waiters. When the lock is released,
+    // exactly one of those waiters will be woken up.
     pub(crate) const CONTENDED: u32 = 2;
 
     pub(crate) fn futex(&self) -> &AtomicU32 {
@@ -72,10 +78,8 @@ impl<T> Mutex<T> {
         let mut state = self.futex.load(Ordering::Relaxed);
 
         loop {
-            // Mark as contended if not already
-            // If unlocked, try to acquire
+            // Upgrade the mutex to contended if it's not already.
             if state != Self::CONTENDED {
-                // Upgrade the mutex to contended.
                 if self.futex.swap(Self::CONTENDED, Ordering::Acquire) == Self::UNLOCKED {
                     // We just swapped from UNLOCKED -> CONTENDED, which means we
                     // took the lock.

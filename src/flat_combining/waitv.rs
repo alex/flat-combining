@@ -28,10 +28,6 @@ pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> Wait
     let futexes = [wait1, wait2];
 
     loop {
-        if waiter.is_ready() {
-            return WaitResult::WaiterReady;
-        }
-
         let mutex_value = mutex.futex().load(Ordering::Relaxed);
         // Upgrade the mutex to contended.
         if mutex_value != Mutex::<T>::CONTENDED {
@@ -44,33 +40,22 @@ pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> Wait
             }
         }
 
-        match futex::waitv(
+        // We have to check the mutex before the waiter, otherwise the
+        // following can happens: Someone `futex_wake`s the mutex, leading us
+        // to wake up, concurrently with our waiter being marked ready. At this
+        // point, if we don't acquire the mutex, then _no one_ will because all
+        // the other waiters will sit around waiting for their `futex_wake`
+        // which will never come.
+        if waiter.is_ready() {
+            return WaitResult::WaiterReady;
+        }
+
+        let _ = futex::waitv(
             &futexes,
             futex::WaitvFlags::empty(),
             None,
             futex::ClockId::Realtime,
-        ) {
-            Ok(index) => {
-                if index == 0 {
-                    // Mutex changed - try to lock it
-                    if mutex.futex().swap(Mutex::<T>::CONTENDED, Ordering::Acquire)
-                        == Mutex::<T>::UNLOCKED
-                    {
-                        // We just swapped from UNLOCKED -> CONTENDED, which means we
-                        // took the lock.
-                        let guard = MutexGuard { mutex };
-                        return WaitResult::MutexLocked(guard);
-                    }
-                } else {
-                    // Waiter was triggered. We need to verify its really ready
-                    // because futex is allowed to cause spurious wakeups.
-                    if waiter.is_ready() {
-                        return WaitResult::WaiterReady;
-                    }
-                }
-            }
-            Err(_) => {}
-        }
+        );
     }
 }
 
