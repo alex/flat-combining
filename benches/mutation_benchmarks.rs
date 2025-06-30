@@ -16,7 +16,7 @@ fn bench_mutator_implementation<M: Mutator<u64> + Sync>(
         Duration::from_nanos(100),
     ];
 
-    let thread_counts = [2, 4, 8];
+    let thread_counts = [2, 4, 8, 16];
     let operations_per_thread = 100;
 
     for &work_duration in &work_durations {
