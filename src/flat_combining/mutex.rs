@@ -75,9 +75,9 @@ impl<T> Mutex<T> {
     }
 
     fn lock_contended(&self) -> MutexGuard<'_, T> {
-        let mut state = self.futex.load(Ordering::Relaxed);
-
         loop {
+            let state = self.spin();
+
             // Upgrade the mutex to contended if it's not already.
             if state != Self::CONTENDED {
                 if self.futex.swap(Self::CONTENDED, Ordering::Acquire) == Self::UNLOCKED {
@@ -89,8 +89,22 @@ impl<T> Mutex<T> {
 
             // Wait on futex
             let _ = futex::wait(&self.futex, futex::Flags::PRIVATE, Self::CONTENDED, None);
+        }
+    }
 
-            state = self.futex.load(Ordering::Relaxed);
+    pub(crate) fn spin(&self) -> u32 {
+        let mut spin = 64;
+        loop {
+            let state = self.futex.load(Ordering::Relaxed);
+
+            // We stop spinning if the mutex is either UNLOCKED or CONTENDED,
+            // or if we've exhausted ourselves.
+            if state != Self::LOCKED || spin == 0 {
+                return state;
+            }
+
+            std::hint::spin_loop();
+            spin -= 1;
         }
     }
 

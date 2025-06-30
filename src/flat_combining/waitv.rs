@@ -28,7 +28,7 @@ pub fn wait_mutex_or_waiter<'a, T>(mutex: &'a Mutex<T>, waiter: &Waiter) -> Wait
     let futexes = [wait1, wait2];
 
     loop {
-        let mutex_value = mutex.futex().load(Ordering::Relaxed);
+        let mutex_value = mutex.spin();
         // Upgrade the mutex to contended.
         if mutex_value != Mutex::<T>::CONTENDED {
             if mutex.futex().swap(Mutex::<T>::CONTENDED, Ordering::Acquire) == Mutex::<T>::UNLOCKED
