@@ -1,5 +1,6 @@
 use rustix::thread::futex;
 use std::cell::UnsafeCell;
+use std::num::NonZero;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -26,10 +27,6 @@ impl<T> Mutex<T> {
     // The lock is taken and there are waiters. When the lock is released,
     // exactly one of those waiters will be woken up.
     pub(crate) const CONTENDED: u32 = 2;
-
-    pub(crate) fn futex(&self) -> &AtomicU32 {
-        &self.futex
-    }
 
     pub fn new(data: T) -> Self {
         Self {
@@ -74,6 +71,33 @@ impl<T> Mutex<T> {
         }
     }
 
+    pub fn bitset_wait_or_lock(
+        &self,
+        bitset: u32,
+        f: impl Fn() -> bool,
+    ) -> Option<MutexGuard<'_, T>> {
+        // Fast path if we're ready.
+        if f() {
+            return None;
+        }
+        // Fast path if the lock is free
+        if self
+            .futex
+            .compare_exchange_weak(
+                Self::UNLOCKED,
+                Self::LOCKED,
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            )
+            .is_ok()
+        {
+            return Some(MutexGuard { mutex: self });
+        }
+
+        // Slow path: contention
+        self.lock_contended_bitset(bitset, f)
+    }
+
     fn lock_contended(&self) -> MutexGuard<'_, T> {
         loop {
             let state = self.spin();
@@ -89,6 +113,39 @@ impl<T> Mutex<T> {
 
             // Wait on futex
             let _ = futex::wait(&self.futex, futex::Flags::PRIVATE, Self::CONTENDED, None);
+        }
+    }
+
+    fn lock_contended_bitset(
+        &self,
+        bitset: u32,
+        f: impl Fn() -> bool,
+    ) -> Option<MutexGuard<'_, T>> {
+        let bitset = NonZero::new(bitset).unwrap();
+        loop {
+            let state = self.spin_bitset(&f);
+
+            // Upgrade the mutex to contended if it's not already.
+            if state != Self::CONTENDED {
+                if self.futex.swap(Self::CONTENDED, Ordering::Acquire) == Self::UNLOCKED {
+                    // We just swapped from UNLOCKED -> CONTENDED, which means we
+                    // took the lock.
+                    return Some(MutexGuard { mutex: self });
+                }
+            }
+
+            if f() {
+                return None;
+            }
+
+            // Wait on futex
+            let _ = futex::wait_bitset(
+                &self.futex,
+                futex::Flags::PRIVATE,
+                Self::CONTENDED,
+                None,
+                bitset,
+            );
         }
     }
 
@@ -108,8 +165,37 @@ impl<T> Mutex<T> {
         }
     }
 
+    pub(crate) fn spin_bitset(&self, f: impl Fn() -> bool) -> u32 {
+        let mut spin = 64;
+        loop {
+            let state = self.futex.load(Ordering::Relaxed);
+
+            // We stop spinning if the condition in f() is true, mutex is
+            // either UNLOCKED or CONTENDED, or if we've exhausted ourselves.
+            if f() || state != Self::LOCKED || spin == 0 {
+                return state;
+            }
+
+            std::hint::spin_loop();
+            spin -= 1;
+        }
+    }
+
     fn unlock(&self) {
         let prev = self.futex.swap(Self::UNLOCKED, Ordering::Release);
+
+        // If there were waiters, wake one
+        if prev == Self::CONTENDED {
+            let _ = futex::wake(&self.futex, futex::Flags::PRIVATE, 1);
+        }
+    }
+
+    fn unlock_bitset(&self, bitset: u32) {
+        let prev = self.futex.swap(Self::UNLOCKED, Ordering::Release);
+
+        if let Some(bitset) = NonZero::new(bitset) {
+            let _ = futex::wake_bitset(&self.futex, futex::Flags::PRIVATE, u32::MAX, bitset);
+        }
 
         // If there were waiters, wake one
         if prev == Self::CONTENDED {
@@ -121,6 +207,13 @@ impl<T> Mutex<T> {
 impl<'a, T> Drop for MutexGuard<'a, T> {
     fn drop(&mut self) {
         self.mutex.unlock();
+    }
+}
+
+impl<T> MutexGuard<'_, T> {
+    pub fn unlock_with_bitset_wake(self, bitset: u32) {
+        self.mutex.unlock_bitset(bitset);
+        std::mem::forget(self);
     }
 }
 

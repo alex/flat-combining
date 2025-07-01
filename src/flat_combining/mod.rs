@@ -1,23 +1,21 @@
 mod erased_fn;
 mod mutex;
 mod record_pool;
-mod waiter;
-mod waitv;
 
 use self::erased_fn::ErasedFn;
-use self::mutex::{Mutex, MutexGuard};
+use self::mutex::Mutex;
 use self::record_pool::RecordPool;
-use self::waiter::Waiter;
 use std::any::Any;
 use std::cell::UnsafeCell;
 use std::ptr;
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 #[pinned_init::pin_data]
 struct OpRecord<T> {
+    idx: UnsafeCell<u8>,
     f: UnsafeCell<Option<ErasedFn<T>>>,
     panic: UnsafeCell<Option<Box<dyn Any + Send + 'static>>>,
-    waiter: Waiter,
+    waiter: AtomicBool,
 
     next: AtomicPtr<Self>,
 }
@@ -45,7 +43,8 @@ impl<T> FlatCombining<T> {
         }
     }
 
-    fn run_combiner(&self, value: &mut T) {
+    #[must_use]
+    fn run_combiner(&self, value: &mut T) -> u32 {
         // Grab the head, replacing it with null.
         let mut head = loop {
             let p = self.head.load(Ordering::Acquire);
@@ -60,6 +59,7 @@ impl<T> FlatCombining<T> {
             };
         };
 
+        let mut bitset = 0;
         while !head.is_null() {
             let record = unsafe { &*head };
 
@@ -70,9 +70,12 @@ impl<T> FlatCombining<T> {
             unsafe {
                 (*record.panic.get()) = result.err();
             }
+            bitset |= idx_to_bitset(unsafe { *record.idx.get() });
             head = record.next.load(Ordering::Acquire);
-            record.waiter.notify();
+            record.waiter.store(true, Ordering::Release);
         }
+
+        bitset
     }
 }
 
@@ -88,38 +91,45 @@ impl<T> crate::Mutator<T> for FlatCombining<T> {
 
     fn mutate<F: FnOnce(&mut T) + Send>(&self, f: F) {
         if let Some(mut guard) = self.data.try_lock() {
-            self.run_combiner(&mut *guard);
+            let bitset = self.run_combiner(&mut *guard);
             f(&mut *guard);
+            guard.unlock_with_bitset_wake(bitset);
             return;
         }
 
         let cb = ErasedFn::new(&f);
         let init = pinned_init::init!(OpRecord {
+            idx: UnsafeCell::new(0),
             f: UnsafeCell::new(Some(cb)),
             panic: UnsafeCell::new(None),
-            waiter: Waiter::new(),
+            waiter: AtomicBool::new(false),
 
             next: AtomicPtr::new(ptr::null_mut()),
         });
         if let Some((record, idx)) = self.pool.allocate(init) {
             // `f` is now owned by the `OpRecord`.
             std::mem::forget(f);
+            // SAFETY: no one else has a reference to the `OpRecord`
+            unsafe {
+                *record.idx.get() = idx;
+            }
             // SAFETY: pointer is valid, we just got it from the pool.
             unsafe {
                 self.push_head(record as *const _ as _);
             }
-            match waitv::wait_mutex_or_waiter(&self.data, &record.waiter) {
-                // Waiter triggered, therefore someone else ran us.
-                waitv::WaitResult::WaiterReady => {}
-                // We got the mutex before our waiter triggered, we are the
-                // combiner.
-                waitv::WaitResult::MutexLocked(mut guard) => {
-                    self.run_combiner(&mut *guard);
-                }
+
+            if let Some(mut guard) = self
+                .data
+                .bitset_wait_or_lock(idx_to_bitset(idx), || record.waiter.load(Ordering::Acquire))
+            {
+                // This means we got the lock.
+                let bitset = self.run_combiner(&mut *guard);
+                guard.unlock_with_bitset_wake(bitset);
             }
+
             // At this point the record should be ready, all we need to do is
             // check the panic state.
-            assert!(record.waiter.is_ready());
+            assert!(record.waiter.load(Ordering::Relaxed));
             // SAFETY: we were marked as ready (or ran), therefore we're now
             // the only thread with access to the record.
             let panic_state = unsafe { (*record.panic.get()).take() };
@@ -133,13 +143,19 @@ impl<T> crate::Mutator<T> for FlatCombining<T> {
         }
         // No records left in the pool, we just need to wait on the mutex.
         let mut guard = self.data.lock();
-        self.run_combiner(&mut *guard);
+        let bitset = self.run_combiner(&mut *guard);
         f(&mut *guard);
+        guard.unlock_with_bitset_wake(bitset);
     }
 }
 
 unsafe impl<T: Send> Send for FlatCombining<T> {}
 unsafe impl<T: Send> Sync for FlatCombining<T> {}
+
+fn idx_to_bitset(idx: u8) -> u32 {
+    let compressed = idx % 32;
+    1 << compressed
+}
 
 #[cfg(test)]
 mod tests {

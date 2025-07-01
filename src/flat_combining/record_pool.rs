@@ -27,7 +27,7 @@ impl<T> RecordPool<T> {
 
     /// Attempts to allocate a slot from the pool.
     /// Returns a reference to the initialized slot and its index if successful, None if pool is full.
-    pub fn allocate(&self, init: impl pinned_init::Init<T>) -> Option<(&T, usize)> {
+    pub fn allocate(&self, init: impl pinned_init::Init<T>) -> Option<(&T, u8)> {
         loop {
             let current = self.available.load(Ordering::Acquire);
 
@@ -56,7 +56,7 @@ impl<T> RecordPool<T> {
                         init.__init((*unsafe_cell.get()).as_mut_ptr()).unwrap();
                         (*unsafe_cell.get()).assume_init_ref()
                     };
-                    return Some((item_ref, slot_index));
+                    return Some((item_ref, slot_index as u8));
                 }
                 Err(_) => {
                     // Another thread modified available, retry
@@ -74,8 +74,8 @@ impl<T> RecordPool<T> {
     ///
     /// # Panics
     /// Panics if index >= 64 or if the slot is already free (double-free).
-    pub unsafe fn free(&self, index: usize) {
-        let cell = &self.items[index];
+    pub unsafe fn free(&self, index: u8) {
+        let cell = &self.items[index as usize];
         unsafe {
             (*cell.get()).assume_init_drop();
         }
