@@ -84,7 +84,7 @@ impl<T> RecordPool<T> {
         let previous = self.available.fetch_or(slot_mask, Ordering::AcqRel);
 
         // Check for double-free
-        assert!(
+        debug_assert!(
             (previous & slot_mask) == 0,
             "Attempted to free already available slot {index}",
         );
