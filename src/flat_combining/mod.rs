@@ -46,18 +46,7 @@ impl<T> FlatCombining<T> {
     #[must_use]
     fn run_combiner(&self, value: &mut T) -> u32 {
         // Grab the head, replacing it with null.
-        let mut head = loop {
-            let p = self.head.load(Ordering::Acquire);
-            match self.head.compare_exchange_weak(
-                p,
-                ptr::null_mut(),
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            ) {
-                Ok(p) => break p,
-                Err(_) => continue,
-            };
-        };
+        let mut head = self.head.swap(ptr::null_mut(), Ordering::AcqRel);
 
         let mut bitset = 0;
         while !head.is_null() {
