@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 pinned-init = { version = "0.0.9", default-features = false }
 rustix = { version = "1.0", features = ["thread", "process"] }
+crossbeam-utils = "0.8"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
