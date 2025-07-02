@@ -37,17 +37,8 @@ impl<T> Mutex<T> {
 
     pub fn lock(&self) -> MutexGuard<'_, T> {
         // Fast path: try to acquire lock directly
-        if self
-            .futex
-            .compare_exchange_weak(
-                Self::UNLOCKED,
-                Self::LOCKED,
-                Ordering::Acquire,
-                Ordering::Relaxed,
-            )
-            .is_ok()
-        {
-            return MutexGuard { mutex: self };
+        if let Some(guard) = self.try_lock() {
+            return guard;
         }
 
         // Slow path: contention
@@ -81,17 +72,8 @@ impl<T> Mutex<T> {
             return None;
         }
         // Fast path if the lock is free
-        if self
-            .futex
-            .compare_exchange_weak(
-                Self::UNLOCKED,
-                Self::LOCKED,
-                Ordering::Acquire,
-                Ordering::Relaxed,
-            )
-            .is_ok()
-        {
-            return Some(MutexGuard { mutex: self });
+        if let Some(guard) = self.try_lock() {
+            return Some(guard);
         }
 
         // Slow path: contention
