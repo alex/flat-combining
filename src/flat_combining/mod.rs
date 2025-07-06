@@ -11,9 +11,9 @@ use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 #[pinned_init::pin_data]
-struct OpRecord<T> {
+struct OpRecord {
     idx: UnsafeCell<u8>,
-    f: UnsafeCell<Option<ErasedFn<T>>>,
+    f: UnsafeCell<Option<ErasedFn>>,
     panic: UnsafeCell<Option<Box<dyn Any + Send + 'static>>>,
     waiter: AtomicBool,
 
@@ -22,13 +22,13 @@ struct OpRecord<T> {
 
 pub struct FlatCombining<T> {
     data: Mutex<T>,
-    pool: RecordPool<OpRecord<T>>,
+    pool: RecordPool<OpRecord>,
 
-    head: AtomicPtr<OpRecord<T>>,
+    head: AtomicPtr<OpRecord>,
 }
 
 impl<T> FlatCombining<T> {
-    unsafe fn push_head(&self, record: *mut OpRecord<T>) {
+    unsafe fn push_head(&self, record: *mut OpRecord) {
         loop {
             let head = self.head.load(Ordering::Acquire);
             (*record).next.store(head, Ordering::Relaxed);
@@ -54,7 +54,7 @@ impl<T> FlatCombining<T> {
 
             let f = unsafe { (*record.f.get()).take().unwrap() };
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                f.invoke(value);
+                unsafe { f.invoke(value) };
             }));
             unsafe {
                 (*record.panic.get()) = result.err();

@@ -88,7 +88,7 @@ impl<T> RecordPool<T> {
     /// # Panics
     /// Panics if index >= 64 or if the slot is already free (double-free).
     pub unsafe fn free(&self, index: u8) {
-        debug_assert!(index < 64, "Index {} is out of bounds", index);
+        debug_assert!(index < 64, "Index {index} is out of bounds");
 
         let cell = &self.items[index as usize];
         unsafe {

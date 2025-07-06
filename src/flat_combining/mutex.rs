@@ -85,12 +85,12 @@ impl<T> Mutex<T> {
             let state = self.spin();
 
             // Upgrade the mutex to contended if it's not already.
-            if state != Self::CONTENDED {
-                if self.futex.swap(Self::CONTENDED, Ordering::Acquire) == Self::UNLOCKED {
-                    // We just swapped from UNLOCKED -> CONTENDED, which means we
-                    // took the lock.
-                    return MutexGuard { mutex: self };
-                }
+            if state != Self::CONTENDED
+                && self.futex.swap(Self::CONTENDED, Ordering::Acquire) == Self::UNLOCKED
+            {
+                // We just swapped from UNLOCKED -> CONTENDED, which means we
+                // took the lock.
+                return MutexGuard { mutex: self };
             }
 
             // Wait on futex
@@ -108,12 +108,12 @@ impl<T> Mutex<T> {
             let state = self.spin_bitset(&f);
 
             // Upgrade the mutex to contended if it's not already.
-            if state != Self::CONTENDED {
-                if self.futex.swap(Self::CONTENDED, Ordering::Acquire) == Self::UNLOCKED {
-                    // We just swapped from UNLOCKED -> CONTENDED, which means we
-                    // took the lock.
-                    return Some(MutexGuard { mutex: self });
-                }
+            if state != Self::CONTENDED
+                && self.futex.swap(Self::CONTENDED, Ordering::Acquire) == Self::UNLOCKED
+            {
+                // We just swapped from UNLOCKED -> CONTENDED, which means we
+                // took the lock.
+                return Some(MutexGuard { mutex: self });
             }
 
             if f() {
